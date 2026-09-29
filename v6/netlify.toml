@@ -1,0 +1,34 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/flow2"
+  to = "https://93cd50265ecdea7aa4fd295cb67b42.d4.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/15/workflows/833d9b835a9e45b498ab64f8727f3a00/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=uvFYMoIkNTOuf2X6Rm-_vTS7KSPXwHgXyT206r7OsCE"
+  status = 200
+  force = true
+  
+# Proxies "/flow" (relative path the app calls) to the real
+# Power Automate HTTP trigger, server-side — this avoids the
+# browser CORS restriction in production, the same way the
+# Vite dev proxy does locally.
+[[redirects]]
+  from = "/flow"
+  to = "https://93cd50265ecdea7aa4fd295cb67b42.d4.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/22/workflows/fa6a24a2ca4b4db498b9eb939349553a/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=YBkFBfYF1FPY_DHWRI0JSpXmHw0ST46XX93XUHeXvwc"
+  status = 200
+  force = true
+
+# Proxies "/auditflow" the same way, for the audit-log email
+# notification flow (see flows.js — callAuditEmailFlow).
+[[redirects]]
+  from = "/auditflow"
+  to = "https://93cd50265ecdea7aa4fd295cb67b42.d4.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/18/workflows/c7212c437f6d41948d051538730ea7d2/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=R9u4HkZeRsU2g0mvWkuc3POFQHqzMAa3uEnRbgDzT6E"
+  status = 200
+  force = true
+
+# All other routes go to the SPA's index.html (client-side routing)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
