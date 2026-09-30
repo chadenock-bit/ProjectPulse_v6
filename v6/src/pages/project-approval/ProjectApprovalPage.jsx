@@ -15,6 +15,7 @@ import {
   callApprovalStatusFlow,
   callProjectApprovalFlow,
   callCurrencyFlow,
+  callProjectStatusFlow,
 } from "../../api/flows";
 import { EmptyState } from "../../components/common/EmptyState";
 import { COLORS, cardStyle, inputStyle, labelStyle } from "../../constants/theme";
@@ -37,6 +38,7 @@ export function ProjectApprovalPage() {
   const [currencies, setCurrencies] = useState([]);
   const [resourceCounts, setResourceCounts] = useState({}); // projectGuid -> count
   const [approvalStatuses, setApprovalStatuses] = useState([]);
+  const [projectStatuses, setProjectStatuses] = useState([]); // Defect #2e: to auto-set "In Progress" on approval
   const [approvalRows, setApprovalRows] = useState([]); // raw ProjectApproval rows from SQL
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState("");
@@ -59,8 +61,9 @@ export function ProjectApprovalPage() {
       callApprovalStatusFlow("LIST"),
       callProjectApprovalFlow("LIST"),
       callCurrencyFlow("LIST"),
+      callProjectStatusFlow("LIST"),
     ])
-      .then(([projRes, clientRes, billingRes, resRes, statusRes, approvalRes, currencyRes]) => {
+      .then(([projRes, clientRes, billingRes, resRes, statusRes, approvalRes, currencyRes, projectStatusRes]) => {
         setProjects(projRes.data);
         setClients(clientRes.data);
         setBillingTypes(billingRes.data);
@@ -70,6 +73,7 @@ export function ProjectApprovalPage() {
         setApprovalStatuses(statusRes.data);
         setApprovalRows(approvalRes.data);
         setCurrencies(currencyRes.data);
+        setProjectStatuses(projectStatusRes.data);
         setLoading(false);
       })
       .catch((e) => { setListError(e.message); setLoading(false); });
@@ -83,6 +87,10 @@ export function ProjectApprovalPage() {
 
   const approvedStatusId = findStatusId(approvalStatuses, /approv/i);
   const rejectedStatusId = findStatusId(approvalStatuses, /reject/i);
+  // Defect #2e: "In Progress" Project Status (not ApprovalStatus) to set
+  // automatically once Finance approves — matched by name, same pattern as
+  // approvedStatusId/rejectedStatusId above.
+  const inProgressStatusId = (projectStatuses.find((s) => /in progress/i.test(s.name || "")) || {}).id ?? null;
 
   // Latest ProjectApproval row per project (highest guid = most recent,
   // since these are auto-increment identity ints and there should only
@@ -170,6 +178,17 @@ export function ProjectApprovalPage() {
       setSaving(false);
     };
 
+    // Defect #2e: on Approve, move the Project's own status (Project.projectStatusId,
+    // separate from this ApprovalStatus decision) to "In Progress" — no manual
+    // status update should be needed after Finance approval. Best-effort: a
+    // failure here is logged but never blocks the approval decision itself.
+    const advanceProjectStatus = () => {
+      if (decisionRow.action !== "Approved" || inProgressStatusId == null) return Promise.resolve();
+      return callProjectFlow("EDIT", { ...decisionRow.project, projectStatusId: inProgressStatusId }).catch((e) => {
+        console.warn("Auto status update to In Progress failed (approval still recorded):", e.message);
+      });
+    };
+
     if (decisionRow.approvalGuid) {
       // Already has a decision row (re-deciding) — EDIT branch handles
       // approvalStatusId/comments/decidedOn/decidedByUserId.
@@ -179,7 +198,7 @@ export function ProjectApprovalPage() {
         comments: comment,
         decidedOn,
         active: true,
-      }).then(finish).catch(fail);
+      }).then(advanceProjectStatus).then(finish).catch(fail);
     } else {
       // First decision on this project — CREATE only accepts
       // projectId/approvalStatusId/cpPercent/requestedByUserId (no
@@ -204,6 +223,7 @@ export function ProjectApprovalPage() {
             active: true,
           });
         })
+        .then(advanceProjectStatus)
         .then(finish)
         .catch(fail);
     }
