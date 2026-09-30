@@ -61,8 +61,13 @@ function Stat({ icon: Icon, label, value }) {
 
 const nameOf = (list, id) => (list || []).find((x) => String(x.id) === String(id))?.name || "—";
 
+// Only these statuses are user-selectable once a project is in Edit mode
+// (Defect #2 / FSD lifecycle rule). Draft and Pending Finance Approval are
+// system-set, not user-chosen, so they're intentionally excluded here.
+const EDITABLE_STATUS_NAMES = ["in progress", "on hold", "completed"];
+
 // Full-screen Add / Edit Project page (used by ProjectDashboardPage).
-export function ProjectPanel({ mode, data, saving, error, onCancel, onClose, onSubmit, lookups, onDocumentToast, allResources = [] }) {
+export function ProjectPanel({ mode, data, saving, error, onCancel, onClose, onSubmit, onSaveDraft, lookups, onDocumentToast, allResources = [] }) {
   const [form, setForm] = useState(data);
 
   const addResource = () => {
@@ -119,6 +124,17 @@ export function ProjectPanel({ mode, data, saving, error, onCancel, onClose, onS
   const billableCount = form.resources.filter((r) => r.billable).length;
   const valueText = form.projectValue ? `${form.currencyCode && form.currencyCode !== "-" ? form.currencyCode : ""} ${Number(form.projectValue).toLocaleString("en-IN")}`.trim() : "—";
 
+  // Add mode: status is locked to the Draft value the parent already set
+  // (see ProjectDashboardPage.openAdd). Edit mode: only the FSD-defined
+  // in-flight statuses are offered, but the project's current status stays
+  // visible/selectable even if it falls outside that list (e.g. a project
+  // already sitting at "Closed" shouldn't show a blank dropdown).
+  const statusOptions = mode === "add"
+    ? (lookups.projectStatuses || [])
+    : (lookups.projectStatuses || []).filter(
+        (s) => EDITABLE_STATUS_NAMES.includes((s.name || "").trim().toLowerCase()) || String(s.id) === String(form.projectStatusId)
+      );
+
   return (
     <div className="pp-project-page" data-access-skip style={{ flex: 1, background: COLORS.bg, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <div style={{ padding: "18px 28px", borderBottom: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", gap: 14, background: COLORS.card }}>
@@ -171,10 +187,18 @@ export function ProjectPanel({ mode, data, saving, error, onCancel, onClose, onS
                 </div>
                 <div>
                   <label style={labelStyle}>Project Status</label>
-                  <select value={form.projectStatusId || ""} onChange={(e) => set("projectStatusId", e.target.value)} style={inputStyle}>
+                  <select
+                    value={form.projectStatusId || ""}
+                    onChange={(e) => set("projectStatusId", e.target.value)}
+                    disabled={mode === "add"}
+                    style={{ ...inputStyle, ...(mode === "add" ? { background: COLORS.bg, color: COLORS.textMuted, cursor: "not-allowed" } : {}) }}
+                  >
                     <option value="">Select status</option>
-                    {(lookups.projectStatuses || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {statusOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
+                  {mode === "add" && (
+                    <div style={{ fontSize: 11.5, color: COLORS.textMuted, marginTop: 5 }}>New projects start as Draft. Status becomes editable after creation.</div>
+                  )}
                 </div>
               </div>
             </Section>
@@ -353,6 +377,12 @@ export function ProjectPanel({ mode, data, saving, error, onCancel, onClose, onS
           </div>
         )}
         <button onClick={onCancel} style={{ padding: "9px 16px", borderRadius: 8, border: `1px solid ${COLORS.border}`, background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", color: COLORS.text }}>Cancel</button>
+        {mode === "add" && onSaveDraft && (
+          <button onClick={() => onSaveDraft(form)} disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, border: `1px solid ${COLORS.accent}`, background: "#fff", color: COLORS.accent, fontSize: 13, fontWeight: 700, cursor: saving ? "default" : "pointer", opacity: saving ? 0.75 : 1, display: "flex", alignItems: "center", gap: 7 }}>
+            {saving && <Loader2 size={13} className="spin" />}
+            Save as Draft
+          </button>
+        )}
         <button onClick={() => onSubmit(form)} disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: COLORS.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving ? "default" : "pointer", opacity: saving ? 0.75 : 1, display: "flex", alignItems: "center", gap: 7 }}>
           {saving && <Loader2 size={13} className="spin" />}
           {saving ? "Saving…" : "Submit"}
